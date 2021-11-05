@@ -451,6 +451,9 @@ procedure GameState_Play_Update()
 	end if
 	
 	% Draw score
+	if opt_botplay then
+		Font.Draw("BOTPLAY", 30, midy + 240, font_header, white)
+	end if
 	Font.Draw("MARVELLOUS: " + intstr(play_marvs), 30, midy + 200, font_regular, white)
 	Font.Draw("PERFECT: " + intstr(play_perfs), 30, midy + 180, font_regular, white)
 	Font.Draw("GREAT: " + intstr(play_greas), 30, midy + 160, font_regular, white)
