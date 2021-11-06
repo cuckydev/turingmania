@@ -1,8 +1,8 @@
 % Window constants
 const SCREEN_WIDTH := 960
 const SCREEN_HEIGHT := 720
-const midx := SCREEN_WIDTH div 2
-const midy := SCREEN_HEIGHT div 2
+const SCREEN_WIDTH2 := SCREEN_WIDTH div 2
+const SCREEN_HEIGHT2 := SCREEN_HEIGHT div 2
 
 % Open game fonts
 var font_regular := Font.New("sans serif:16")
@@ -16,6 +16,8 @@ include "Map.t"
 
 % Initialize game
 Render_Init()
+var midx := maxx div 2
+var midy := maxy div 2
 
 % Load game and maps
 procedure DisplayLoad(act : string)
@@ -30,12 +32,13 @@ DisplayLoad("Indexing maps")
 Map_Index()
 
 % Game options
-const OPT_VER := 0
+const OPT_VER := 1
 var opt_fp : int
 
 var opt_offset := 0
 var opt_botplay := false
 var opt_downscroll := false
+var opt_splashes := true
 var opt_scrollspeed := 1.0
 
 % Load options
@@ -47,6 +50,7 @@ if opt_fp >= 0 then
 		get : opt_fp, opt_offset
 		get : opt_fp, opt_botplay
 		get : opt_fp, opt_downscroll
+		get : opt_fp, opt_splashes
 		get : opt_fp, opt_scrollspeed
 	end if
 	close : opt_fp
@@ -107,6 +111,7 @@ if opt_fp >= 0 then
 	put : opt_fp, opt_offset
 	put : opt_fp, opt_botplay
 	put : opt_fp, opt_downscroll
+	put : opt_fp, opt_splashes
 	put : opt_fp, opt_scrollspeed
 	close : opt_fp
 end if

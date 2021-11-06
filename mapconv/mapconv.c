@@ -52,6 +52,11 @@ int main(int argc, char *argv[])
 			case 448:
 				x = 3;
 				break;
+			default:
+				printf("Invalid X, may be a 7K song?\n");
+				fclose(fp);
+				fclose(out);
+				return 1;
 		}
 		if (type & 0x80)
 		{

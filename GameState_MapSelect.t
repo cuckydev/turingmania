@@ -55,11 +55,14 @@ procedure GameState_MapSelect_Update()
 		else
 			col := 54
 		end if
-		var dwidth := Font.Width(map_index(i).name, font_regular) + 32
-		var lscroll := -floor((Time.Elapsed() / 10) mod dwidth)
-		for j : lscroll .. SCREEN_WIDTH by dwidth
-			Font.Draw(map_index(i).name, j, maxy - 120 - (i * 24) - floor(map_select_y), font_regular, col)
-		end for
+		var y := maxy - 120 - (i * 24) - floor(map_select_y)
+		if y > -20 and y < maxy + 20 then
+			var dwidth := Font.Width(map_index(i).name, font_regular) + 32
+			var lscroll := -floor((Time.Elapsed() / 10) mod dwidth)
+			for j : lscroll .. SCREEN_WIDTH by dwidth
+				Font.Draw(map_index(i).name, j, y, font_regular, col)
+			end for
+		end if
 	end for
 	
 	Font.Draw("turingmania", 50, maxy - 80, font_title, 53)

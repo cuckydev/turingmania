@@ -16,6 +16,12 @@ type Play_NoteDraw:
 		hold : boolean
 		miss : boolean
 	end record
+type Play_NoteSplash:
+	record
+		x : int
+		y : int
+		time : int
+	end record
 
 var play_note : flexible array 1 .. 0 of Play_Note
 var play_notes : int
@@ -23,6 +29,8 @@ var play_note_i : int
 
 var play_notedraw : flexible array 1 .. 0 of Play_NoteDraw
 var play_notedraws : int
+
+var play_notesplash : flexible array 1 .. 0 of Play_NoteSplash
 
 var play_start : int
 var play_time : int
@@ -48,10 +56,12 @@ var play_miss : int
 var play_acc_hits : real
 var play_acc_chks : int
 
+const PLAY_SPLASH_T := 300
+
 const PLAY_WIN_MARV := 25
 const PLAY_WIN_PERF := 45
 const PLAY_WIN_GREA := 80
-const PLAY_WIN_GOOD := 145
+const PLAY_WIN_GOOD := 120
 const PLAY_WIN := 180
 
 const PLAY_NOTERAD := floor(40 * SCREEN_HEIGHT / 720)
@@ -108,6 +118,10 @@ body procedure GameState_Play_Init(path : string, song : string)
 	play_acc_hits := 0.0
 	play_acc_chks := 0
 	
+	for i : 1 .. upper(play_notesplash)
+		play_notesplash(i).time := Time.Elapsed() - PLAY_SPLASH_T
+	end for
+	
 	% Start song
 	var a := Time.Elapsed()
 	Music.PlayFileReturn(song)
@@ -119,7 +133,36 @@ body procedure GameState_Play_Init(path : string, song : string)
 	game_state := GameState.Play
 end GameState_Play_Init
 
-function GameState_Play_Judge(time : int) : boolean
+procedure GameState_Play_Splash(x : nat1)
+	if not opt_splashes then
+		return
+	end if
+	
+	% Get position
+	var sx := midx + floor((x - 1.5) * PLAY_JUDGERAD)
+	var sy := SCREEN_HEIGHT2 - PLAY_JUDGERAD
+	
+	% Allocate splash
+	var j := upper(play_notesplash) + 1
+	for decreasing i : upper(play_notesplash) .. 0
+		if i = 0 then
+			j := 1
+			exit
+		end if
+		if Time.Elapsed() < (play_notesplash(i).time + PLAY_SPLASH_T) then
+			exit
+		else
+			j := i
+		end if
+	end for
+	
+	new play_notesplash, j
+	play_notesplash(j).x := sx
+	play_notesplash(j).y := sy
+	play_notesplash(j).time := Time.Elapsed()
+end GameState_Play_Splash
+
+function GameState_Play_Judge(x : nat1, time : int) : boolean
 	% Get absolute time offset
 	var ctime := time - play_time
 	if ctime < 0 then
@@ -136,7 +179,7 @@ function GameState_Play_Judge(time : int) : boolean
 		play_acc_hits += 0.0
 		play_acc_chks += 3
 		result true
-	elsif ctime >= PLAY_WIN_GOOD then
+	elsif ctime > PLAY_WIN_GOOD then
 		play_judge_time := Time.Elapsed()
 		play_judge_str := "BOO"
 		play_judge_col := blue
@@ -145,7 +188,7 @@ function GameState_Play_Judge(time : int) : boolean
 		play_acc_hits += 0.05
 		play_acc_chks += 2
 		result true
-	elsif ctime >= PLAY_WIN_GREA then
+	elsif ctime > PLAY_WIN_GREA then
 		play_judge_time := Time.Elapsed()
 		play_judge_str := "GOOD"
 		play_judge_col := yellow
@@ -154,7 +197,7 @@ function GameState_Play_Judge(time : int) : boolean
 		play_acc_hits += 0.3
 		play_acc_chks += 1
 		result false
-	elsif ctime >= PLAY_WIN_PERF then
+	elsif ctime > PLAY_WIN_PERF then
 		play_judge_time := Time.Elapsed()
 		play_judge_str := "GREAT"
 		play_judge_col := green
@@ -163,7 +206,7 @@ function GameState_Play_Judge(time : int) : boolean
 		play_acc_hits += 0.8
 		play_acc_chks += 1
 		result false
-	elsif ctime >= PLAY_WIN_MARV then
+	elsif ctime > PLAY_WIN_MARV then
 		play_judge_time := Time.Elapsed()
 		play_judge_str := "PERFECT!"
 		play_judge_col := cyan
@@ -171,6 +214,7 @@ function GameState_Play_Judge(time : int) : boolean
 		play_perfs += 1
 		play_acc_hits += 2.0
 		play_acc_chks += 2
+		GameState_Play_Splash(x)
 		result false
 	else
 		play_judge_time := Time.Elapsed()
@@ -180,13 +224,14 @@ function GameState_Play_Judge(time : int) : boolean
 		play_marvs += 1
 		play_acc_hits += 3.0
 		play_acc_chks += 3
+		GameState_Play_Splash(x)
 		result false
 	end if
 end GameState_Play_Judge
 
 procedure GameState_Play_CheckRelease(var hold : int)
 	if hold >= 0 and play_note(hold).hold then
-		if GameState_Play_Judge(play_note(hold).timeend) then
+		if GameState_Play_Judge(play_note(hold).x, play_note(hold).timeend) then
 			play_note(hold).hold := false
 			play_note(hold).miss := true
 			if play_time > play_note(hold).timeend then
@@ -221,7 +266,7 @@ procedure GameState_Play_CheckHit(x : nat1, var hold : int)
 				else
 					play_note(i).hit := true
 				end if
-				if GameState_Play_Judge(play_note(i).time) then
+				if GameState_Play_Judge(play_note(i).x, play_note(i).time) then
 					% nothing
 				end if
 				exit
@@ -356,17 +401,17 @@ procedure GameState_Play_Update()
 				% Miss if not missed yet
 				if not play_note(i).miss then
 					play_note(i).miss := true
-					if GameState_Play_Judge(play_note(i).time) then
+					if GameState_Play_Judge(play_note(i).x, play_note(i).time) then
 						% nothing
 					end if
-					if play_note(i).timeend > play_note(i).time and GameState_Play_Judge(play_note(i).time) then
+					if play_note(i).timeend > play_note(i).time and GameState_Play_Judge(play_note(i).x, play_note(i).time) then
 						% nothing
 					end if
 				end if
 			end if
 			
 			% Don't draw if off-screen
-			if sy >= maxy + PLAY_NOTERAD then
+			if sy >= SCREEN_HEIGHT + PLAY_NOTERAD then
 				exit
 			end if
 			
@@ -396,50 +441,62 @@ procedure GameState_Play_Update()
 		scroll_mul := 1
 	end if
 	
+	% Draw splashes
+	for i : 1 .. upper(play_notesplash)
+		if Time.Elapsed() < (play_notesplash(i).time + PLAY_SPLASH_T) then
+			var p : real := 1.0 - ((Time.Elapsed() - play_notesplash(i).time) / PLAY_SPLASH_T)
+			var p2 : real := 1.0 - max(0, (Time.Elapsed() - play_notesplash(i).time) * 1.5 / PLAY_SPLASH_T - 0.5)
+			var ro := floor(PLAY_NOTERAD * (2.0 - (p * p * p)))
+			var ri := floor(PLAY_NOTERAD * (2.0 - (p2 * p2)))
+			Draw.FillOval(play_notesplash(i).x, midy + play_notesplash(i).y * scroll_mul, ro, ro, white)
+			Draw.FillOval(play_notesplash(i).x, midy + play_notesplash(i).y * scroll_mul, ri, ri, black)
+		end if
+	end for
+	
 	% Draw judgement line
-	if key_game_left.held or play_hold_left >= 0 then
-		Draw.FillOval(midx + floor((0 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+	if (opt_botplay = false and key_game_left.held) or play_hold_left >= 0 then
+		Draw.FillOval(midx + floor((0 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	else
-		Draw.Oval    (midx + floor((0 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+		Draw.Oval    (midx + floor((0 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	end if
-	if key_game_down.held or play_hold_down >= 0 then
-		Draw.FillOval(midx + floor((1 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+	if (opt_botplay = false and key_game_down.held) or play_hold_down >= 0 then
+		Draw.FillOval(midx + floor((1 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	else
-		Draw.Oval    (midx + floor((1 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+		Draw.Oval    (midx + floor((1 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	end if
-	if key_game_up.held or play_hold_up >= 0 then
-		Draw.FillOval(midx + floor((2 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+	if (opt_botplay = false and key_game_up.held) or play_hold_up >= 0 then
+		Draw.FillOval(midx + floor((2 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	else
-		Draw.Oval    (midx + floor((2 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+		Draw.Oval    (midx + floor((2 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	end if
-	if key_game_right.held or play_hold_right >= 0 then
-		Draw.FillOval(midx + floor((3 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+	if (opt_botplay = false and key_game_right.held) or play_hold_right >= 0 then
+		Draw.FillOval(midx + floor((3 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	else
-		Draw.Oval    (midx + floor((3 - 1.5) * PLAY_JUDGERAD), midy + (midy - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+		Draw.Oval    (midx + floor((3 - 1.5) * PLAY_JUDGERAD), midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 	end if
 	
 	% Draw notes
 	for i : 1 .. play_notedraws
 		if play_notedraw(i).hold then
 			if play_notedraw(i).ey > 0 then
-				Draw.Arc(midx + play_notedraw(i).x, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, scroll_a0, scroll_a1, white)
-				Draw.Line(midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, midx + play_notedraw(i).x - PLAY_NOTERAD, midy + (midy - PLAY_JUDGERAD) * scroll_mul, white)
-				Draw.Line(midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, midx + play_notedraw(i).x + PLAY_NOTERAD, midy + (midy - PLAY_JUDGERAD) * scroll_mul, white)
+				Draw.Arc(midx + play_notedraw(i).x, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, scroll_a0, scroll_a1, white)
+				Draw.Line(midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, midx + play_notedraw(i).x - PLAY_NOTERAD, midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, white)
+				Draw.Line(midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, midx + play_notedraw(i).x + PLAY_NOTERAD, midy + (SCREEN_HEIGHT2 - PLAY_JUDGERAD) * scroll_mul, white)
 			end if
 		elsif play_notedraw(i).miss then
 			if play_notedraw(i).ey > play_notedraw(i).sy then
-				Draw.Arc(midx + play_notedraw(i).x, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, scroll_a0, scroll_a1, 23)
-				Draw.Line(midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, 23)
-				Draw.Line(midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, 23)
+				Draw.Arc(midx + play_notedraw(i).x, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, scroll_a0, scroll_a1, 23)
+				Draw.Line(midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, 23)
+				Draw.Line(midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, 23)
 			end if
-			Draw.FillOval(midx + play_notedraw(i).x, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, 23)
+			Draw.FillOval(midx + play_notedraw(i).x, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, 23)
 		else
 			if play_notedraw(i).ey > play_notedraw(i).sy then
-				Draw.Arc(midx + play_notedraw(i).x, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, scroll_a0, scroll_a1, white)
-				Draw.Line(midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, white)
-				Draw.Line(midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, white)
+				Draw.Arc(midx + play_notedraw(i).x, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, scroll_a0, scroll_a1, white)
+				Draw.Line(midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x - PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, white)
+				Draw.Line(midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, midx + play_notedraw(i).x + PLAY_NOTERAD, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).ey) * scroll_mul, white)
 			end if
-			Draw.FillOval(midx + play_notedraw(i).x, midy + ((midy - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
+			Draw.FillOval(midx + play_notedraw(i).x, midy + ((SCREEN_HEIGHT2 - PLAY_JUDGERAD) - play_notedraw(i).sy) * scroll_mul, PLAY_NOTERAD, PLAY_NOTERAD, white)
 		end if
 	end for
 	
